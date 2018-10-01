@@ -1,11 +1,1 @@
-# MACS
-# MACS
-# MACS
-# SD
-# SD
-# SD
-# SD
-# SD
-# MACS
-# MACS
-# Stochastic_Calculus
+#Work of my specialization on Random Processes and Stochastic Calculus during my second year at Telecom Paristech. 
