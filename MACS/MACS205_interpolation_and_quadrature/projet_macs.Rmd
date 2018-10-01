@@ -1,0 +1,815 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+### *MACS 205 : Interpolation et quadrature - Etude de cas*
+
+#### 1. Introduction 
+
+On s'intéresse à la loi Beta de paramètres $\alpha > 0$, $\beta > 0$ de densité : 
+$\phi_{\alpha,\beta}(x) = x^{\alpha - 1}(1-x)^{\beta - 1}/B_{\alpha, \beta}$
+
+avec : $B_{\alpha, \beta} = \frac{\Gamma(\alpha)\Gamma(\beta)}{\Gamma(\alpha + \beta)}$
+
+Pour la suite on prendra : $\alpha = 1.7$ et $\beta = 5.1$.
+
+#### 2. Génération des données et fonctions préliminaires
+
+*2.1.*
+```{r}
+  densite  = function(x) {
+    return(dbeta(x, 1.7, 5.1))
+  }
+```
+
+*2.2.* Par la loi forte des grands nombres, on obtient que 
+$\widehat{\phi}^{N_{w}}_{1.7, 5.1} (x) \overset{p.s.}{\rightarrow} 2^{8}.\mathbb{P}(\omega \in [k(x)2^{-8}, (k(x)+1)2^{-8}[).$
+
+
+*2.3.* 
+On obtient : 
+$$ \widehat{\phi}^{~\infty}_{1.7,5.1}(x)-{\phi}_{1.7,5.1}(x) = 2^8. \int^{(k(x)+1)2^{-8}}_{k(x)2^{-8}}{\phi}_{1.7,5.1}(u)-{\phi}_{1.7,5.1}(x)~du.  $$
+
+*2.4.* La fonction renvoie la fréquence correspondant à l'index de x, divisée par la largeur du pas pour obtenir une densité.
+
+
+#### 3. Interpolation polynomiale
+*3.1.* Interpolation à partir de l'expression exacte de $\phi_{1.7, 5.1}$
+
+3.1.1
+```{r}
+dividif=function(x,y){
+##  Newton's Divided differences
+    n = length(x) - 1 ## degree of the Lagrange polynomial
+    d  = y 
+    for (j in 2:(n+1) ) {
+      d[j : (n+1) ] = (d[j : (n+1)] - d[(j-1):n])/(x[j:(n+1)] - x[1:(n+2-j)])
+    }
+    return(d)    
+}
+
+
+
+hornerNewton = function(a,x,z){
+    ## Horner's method: Evaluates  a polynom P at points z, given
+    n = length(x);
+    f  = a[n] * (z-x[n-1]) + a[n-1]
+    for( i in 2:(n-1)){
+        f = a[n-i] + f  * (z-x[n-i])
+    }
+    return(f)
+}
+
+
+interpolDividif=function(x,y,z){
+    ## Efficient Lagrange interpolation using Horner's method with  
+    ## Newton basis for evaluation
+    coeff = dividif(x,y)
+    return (hornerNewton(coeff, x, z))
+}
+
+
+NTcheby = function(n, a, b){
+  T = seq(0, n-1);
+  for (k in (1:n)){
+    T[k]= ((a+b)/2) + ((a-b)/2)*cos(((T[k]+(1/2))*pi)/n)}
+  return (T)
+}
+
+  interpolLagrange =function(n, a, b, neval, nodes = 'equi', FUN){
+      ## Generic Lagrange interpolation, with equidistant or Chebyshev nodes. 
+      ## @param n : the degree of the interpolating polynomial on each
+      ## subinterval
+      ## @param a : left end-point of the interval
+      ## @param b : right end-point of the interval
+      ## @param neval :number of evaluation points (a regular grid will be
+      ## used on [a,b]
+      ## @param nodes :string, either "equi" (default) for equidistant
+      ## Lagrange interpolation (on each subinterval) or "cheby" for
+      ## using Chebyshev nodes.
+      ## @param FUN: the function to be interpolated 
+      ## @return : vector of size 'neval': the values of the Lagrange
+      ## polynomial on an equi-distant grid.
+      
+      if (nodes == 'equi'){
+          x =  seq(a,b,length.out=n)  
+              }
+      else if (nodes == 'cheby'){
+                  x = NTcheby(n,a,b)
+                      }
+      else{stop("the nodes must be either 'equi' or 'cheby'") }
+      
+      z = seq(a,b,length.out=neval)
+      y = FUN(x)
+      f = interpolDividif(x, y, z)
+      
+      return(f)              
+  }
+
+  
+   n_eval_test = 1000
+  a_test = 2^(-8)
+  b_test = 1 - a_test
+  z = seq(0,1,length.out=n_eval_test)
+  y = densite(z)
+
+plot(z, sapply(z,densite), type="o",
+     ylim=range(c(y,interpolLagrange(3, a_test, b_test, n_eval_test, 'equi', densite))),col = 'black')
+grid()
+title(main = paste("Lagrange interpolation with 4 to 11 equidistant nodes"))
+
+lines(z, interpolLagrange(3, a_test, b_test, n_eval_test, 'equi', densite), col = "green")
+lines(z, interpolLagrange(4, a_test, b_test, n_eval_test, 'equi', densite), col = "yellow")
+lines(z, interpolLagrange(6, a_test, b_test, n_eval_test, 'equi', densite), col = "purple")
+lines(z, interpolLagrange(8, a_test, b_test, n_eval_test, 'equi', densite), col = "blue")
+lines(z, interpolLagrange(10, a_test, b_test, n_eval_test, 'equi', densite), col = "red")
+
+legend('topright', 
+       legend=c('function','interpolation of degree 3', 
+        'interpolation of degree 4', 'interpolation of degree 6',
+       'interpolation of degree 8', 'interpolation of degree 10'), 
+       col = c('black','green', 'yellow', 'purple', 'blue', 'red'), lwd=3)
+```
+
+```{r}
+plot(z, sapply(z,densite), type="o",
+     ylim=range(c(y,interpolLagrange(40, a_test, b_test, n_eval_test, 'equi', densite))),
+     col = 'black')
+grid()
+title(main = paste("Lagrange interpolation with 21 to 61 equidistant nodes"))
+
+lines(z, interpolLagrange(20, a_test, b_test, n_eval_test, 'equi', densite), col = "green")
+lines(z, interpolLagrange(30, a_test, b_test, n_eval_test, 'equi', densite), col = "yellow")
+lines(z, interpolLagrange(40, a_test, b_test, n_eval_test, 'equi', densite), col = "purple")
+lines(z, interpolLagrange(50, a_test, b_test, n_eval_test, 'equi', densite), col = "blue")
+lines(z, interpolLagrange(58, a_test, b_test, n_eval_test, 'equi', densite), col = "red")
+lines(z, interpolLagrange(59, a_test, b_test, n_eval_test, 'equi', densite), col = "gray")
+lines(z, interpolLagrange(60, a_test, b_test, n_eval_test, 'equi', densite), col = "blue")
+
+legend('topright', legend=c('function','interpolation of degree 20', 
+                            'interpolation of degree 30', 'interpolation of degree 40',
+                            'interpolation of degree 50', 'interpolation of degree 58', 
+                            'interpolation of degree 59', 'interpolation of degree 60'), 
+                            col = c('black','green', 'yellow', 'purple', 'blue', 'red', 'gray', 'blue'), lwd=3)
+```
+
+(a) A partir d'un polynôme de degré 58, l'augmentation du degré ne constitue plus une bonne stratégie d'interpolation : il s'agit du phénomène de Runge. Alors qu'à un degré inférieur, l'interpolation est bonne.
+
+(b) : 
+```{r}
+plot(z, sapply(z,densite), type="o",
+     ylim=range(c(y,interpolLagrange(3, a_test, b_test, n_eval_test, 'equi', densite))),col = 'black')
+grid()
+title(main = paste("Lagrange interpolation with 4 equidistant nodes"))
+
+lines(z, interpolLagrange(3, a_test, b_test, n_eval_test, 'equi', densite), col = "red")
+legend('topright', 
+       legend=c('function','interpolation of degree 3'), 
+       col = c('black','red'), lwd=3)
+```
+On perçoit bien que le degré de l'interpolation est ici trop bas. 
+
+```{r}
+plot(z, sapply(z,densite), type="o",
+     ylim=range(c(y,interpolLagrange(5, a_test, b_test, n_eval_test, 'equi', densite))),col = 'black')
+grid()
+title(main = paste("Lagrange interpolation with 6 equidistant nodes"))
+
+lines(z, interpolLagrange(5, a_test, b_test, n_eval_test, 'equi', densite), col = "red")
+legend('topright', 
+       legend=c('function','interpolation of degree 5'), 
+       col = c('black','red'), lwd=3)
+```
+On commence à obtenir une version approchée de la fonction mais qui reste imprécise. 
+
+```{r}
+plot(z, sapply(z,densite), type="o",
+     ylim=range(c(y,interpolLagrange(60, a_test, b_test, n_eval_test, 'equi', densite))),col = 'black')
+grid()
+title(main = paste("Lagrange interpolation with 61 equidistant nodes"))
+
+lines(z, interpolLagrange(70, a_test, b_test, n_eval_test, 'equi', densite), col = "red")
+legend('topright', 
+       legend=c('function','interpolation of degree 60'), 
+       col = c('black','red'), lwd=3)
+```
+On observe de grosses instabilitées à un trop haut degrée d'interpolation : c'est le phénomène de Runge. 
+
+3.1.2
+```{r}
+plot(z, sapply(z,densite), type="o",ylim=range(c(y,interpolLagrange(3, a_test, b_test, n_eval_test, 'equi', densite))),col = 'black')
+grid()
+title(main = paste("Lagrange interpolation with 4 to 11 chebyshev nodes"))
+
+lines(z, interpolLagrange(3, a_test, b_test, n_eval_test, 'cheby', densite), col = "green")
+lines(z, interpolLagrange(4, a_test, b_test, n_eval_test, 'cheby', densite), col = "yellow")
+lines(z, interpolLagrange(6, a_test, b_test, n_eval_test, 'cheby', densite), col = "purple")
+lines(z, interpolLagrange(8, a_test, b_test, n_eval_test, 'cheby', densite), col = "blue")
+lines(z, interpolLagrange(10, a_test, b_test, n_eval_test, 'cheby', densite), col = "red")
+
+legend('topright', 
+       legend=c('function','interpolation of degree 3', 
+        'interpolation of degree 4', 'interpolation of degree 6',
+       'interpolation of degree 8', 'interpolation of degree 10'), 
+       col = c('black','green', 'yellow', 'purple', 'blue', 'red'), lwd=3)
+```
+```{r}
+plot(z, sapply(z,densite), type="n",
+     ylim=range(c(y,interpolLagrange(40, a_test, b_test, n_eval_test, 'equi', densite))),
+     col = 'black')
+grid()
+title(main = paste("Lagrange interpolation with 21 to 60 chebyshev nodes"))
+lines(z, interpolLagrange(20, a_test, b_test, n_eval_test, 'cheby', densite), col = "green")
+lines(z, interpolLagrange(30, a_test, b_test, n_eval_test, 'cheby', densite), col = "yellow")
+lines(z, interpolLagrange(40, a_test, b_test, n_eval_test, 'cheby', densite), col = "purple")
+lines(z, interpolLagrange(50, a_test, b_test, n_eval_test, 'cheby', densite), col = "blue")
+lines(z, interpolLagrange(58, a_test, b_test, n_eval_test, 'cheby', densite), col = "red")
+
+
+legend('topright', legend=c('function','interpolation of degree 20', 
+                            'interpolation of degree 30', 'interpolation of degree 40',
+                            'interpolation of degree 50', 'interpolation of degree 58'), 
+                            col = c('black','green', 'yellow', 'purple', 'blue', 'red', 'gray'), lwd=3)
+```
+Par soucis de lisibilité, on a pas affiché la fonction exacte. 
+
+Les nœuds étant répartis d'une manière différentes, on remarque que l'interpolation est beaucoup plus rapide à converger, mais aussi que le phénomène de Runge apparaît dès le degré 40.
+Pour se convaincre qu'il s'agit bien du phénomène de Runge, on peut interpoler la densité avec un polynôme de degré bien supérieur: 
+
+```{r}
+plot(z, sapply(z,densite), type="o",
+     ylim=range(c(y,interpolLagrange(40, a_test, b_test, n_eval_test, 'equi', densite))),
+     col = 'black')
+grid()
+title(main = paste("Lagrange interpolation with 88 chebyshev nodes"))
+
+lines(z, interpolLagrange(87, a_test, b_test, n_eval_test, 'cheby', densite), col = "red")
+legend('topright', legend=c('function', 
+                            'interpolation of degree 87'), 
+                            col = c('black', 'red'), lwd=3)
+```
+Ainsi, on voit sur ces exemples que les nœuds de Chebyshev sont meilleurs que des nœuds equidistants car ils convergent plus vites en terme de degrés.
+
+3.1.3.
+```{r}
+
+dividif=function(x,y){
+##  Newton's Divided differences
+    n = length(x) - 1 ## degree of the Lagrange polynomial
+    d  = y 
+    if(n==0){
+      d = d/x
+    } else {
+    for (j in 2:(n+1) ) {d[j : (n+1) ] = (d[j : (n+1)] - d[(j-1):n])/(x[j:(n+1)] - x[1:(n+2-j)])}
+      }
+    return(d)    
+}
+
+hornerNewton = function(a,x,z){
+## Horner's method: Evaluates a polynom P at points z, given ## nodes x and the coefficients a of P in Newton's basis
+##
+## @param a : vector: the coefficients of the polynomial in ## Newton's basis
+## @param x : the interpolation nodes.
+## @param z : vector of points where the polynom needs to be ## evaluated.
+## @return : a vector of same size as z: the value of the
+## polynomial at points z.
+##
+n = length(x)
+f = a[n]*rep(1,length(z))
+if(n==0){stop('at least one interpolating point is needed')} 
+if(n==1){
+  f = f*(z-x[1]) 
+}
+if(n >= 2){
+       for( i in 1:(n-1)){
+           f = f * (z-x[n-i]) + a[n-i]
+} }
+return(f) }
+
+piecewiseInterpol=function(n,nInt,a,b,neval, nodes = 'equi', FUN, Plot) {
+    ## @param n : the degree of the interpolating polynomial on each
+    ## subinterval
+    ## @param nInt :  the number of sub-intervals
+    ## @param a, b : endpoints of the interval
+    ## @param neval : the number of points on the interpolating grid (on
+    ## each subinterval)
+    ## @param nodes : string, either "equi" (default) for equidistant
+    ## Lagrange interpolation (on each subinterval) or "cheby" for
+    ## chebyshev nodes.
+    ## @param FUN the function to be interpolated
+    ## @param Plot : logical. Should the result be plotted ?
+    ## @return : a matrix with 2 rows and neval * nInt -neval + 1:
+    ## values of the interpolated funtion on a regular grid (first row)
+    ## and the corresponding abscissas (second row).
+
+    intEndPoints = seq(a,b,length.out = nInt+1)
+    f = c()
+    z = c()
+    for (m in 1:nInt){
+        A = intEndPoints[m]; B = intEndPoints[m+1] 
+        
+        fm = interpolLagrange(n, A, B, neval, nodes, FUN)
+        zm = seq(A,B,length.out=length(fm)) 
+                
+            if( m >= 2){
+                zm = zm[2:length(fm)];
+                fm = fm[2:length(fm)];
+        z = c(z,zm);
+        f = c(f,fm);
+            }
+    } 
+    if (Plot == 0) {
+    return(f)
+    } else {
+        if (nodes == "equi") {methodName = " equidistant "}
+        else  {methodName = " Chebyshev "}
+        
+        
+        plot(z, sapply(z,FUN),type="l");
+        title(main = paste("Piecewise Lagrange interpolation with",
+                           toString(n+1), methodName, "nodes on",
+                           toString(nInt), "Intervals", sep=" "));
+        lines(z,f, col='red', lwd=2);
+        legend('topright', legend = c('function','interpolation'),
+               lwd=c(1,2), col=c('black','red'));
+    }}
+
+# Affichage avec n=1
+piecewiseInterpol(1, 20, a_test, b_test, 1000, 'equi', densite, TRUE)
+
+```
+```{r}
+# Affichage avec n=2
+piecewiseInterpol(2, 20, a_test, b_test, 1000, 'equi', densite, TRUE)
+```
+```{r}
+# Affichage avec n = 3
+piecewiseInterpol(3, 20, a_test, b_test, 1000, 'equi', densite, TRUE)
+```
+
+3.1.4. 
+
+(a) : M sous-intervalles avec une interpollation de degré 3 correspondent à $3M +1$ points. Mais en raison des (M-1) points communs à deux intervalles cela donne degré 3M avec la méthode "simple". ($4*(M-1)=3.M$)
+
+(b) : L'interpolation par morceau renvoie un vecteur de taille $(neval -1)*nInt+1$, puisque $nInt=M$ si $neval=floor( (2^{10} -1)/M) +1$ on obtient alors un vecteur de taille $M*floor( (2^{10} -1)/M) +1$ d'une différence d'au plus $M-1$ par rapport au $neval=2^{10}$ de la méthode simple. 
+
+(c) : 
+```{r}
+
+erreur = function(f,FUN){
+  z = seq(0,1,length.out = 1000)
+  y = FUN(z)
+  erreur = 0
+  for (k in(length(z))){
+    erreur = c(erreur, abs(y[k]-f[k]))
+  }
+  return (max(erreur))
+}
+
+erreurSimple = erreur(interpolLagrange(3+1, a_test, b_test, 2^10, 'equi', densite), densite)
+erreurParMorceau = erreur(piecewiseInterpol(3, 20, a_test, b_test, floor((2^10 -1)/1)+1, 'equi', densite, FALSE), densite)
+
+for (M in (2:20)){
+  erreurSimple = c(erreurSimple, erreur(interpolLagrange(3*M+1, a_test, b_test, 2^10, 'equi', densite), densite))
+  erreurParMorceau = c(erreurParMorceau, erreur(piecewiseInterpol(3, 20, a_test, b_test, floor((2^10 -1)/M)+1, 'equi', densite, FALSE), densite))
+}
+```
+
+```{r}
+M = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20)
+plot(M,erreurParMorceau, type = 'o', col = 'red', ylab = 'Erreur')
+lines(M,erreurSimple, type = 'o', col = 'blue')
+title(main = "Approximation de la norme infinie de l'erreur pour M variant de 1 à 20")
+legend('topright', legend = c('methode par morceau','méthode simple'),
+               lwd=3, col=c('red','blue'))
+grid()
+```
+```{r}
+plot(M, erreurSimple, type = 'o', col = 'red', ylab = 'Erreur')
+lines(M, erreurParMorceau, type = 'o', col = 'blue')
+title(main = "Approximation de la norme infinie de l'erreur pour M variant de 1 à 20")
+legend('topright', legend = c('methode simple','méthode par morceau'),
+               lwd=3, col=c('red','blue'))
+grid()
+```
+Ainsi, on remarque que la méthode simple est préférable à la méthode par morceau pour $M < 18.$ 
+
+*3.2. Interpolation à partir de l'histogramme*
+
+*3.2.5.*
+
+1. (a)
+
+**Question 1**
+```{r}
+load("/Users/Raph/Desktop/Mini-projet MACS/hist1.rda")
+source("~/Desktop/Mini-projet MACS/ini_functions.R")
+histog <- hist1
+
+funHisto = function(x){ #On transforme hist_value en une fonction de x afin de pouvoir réutiliser le code précédent.
+  return(hist_value(histog,x))
+}
+space_int <- 2^(-8)
+
+  n_eval_test = 1000
+  a_test = 2^(-8)
+  b_test = 1 - a_test
+  z = seq(a_test,b_test,length.out=n_eval_test)
+  y = sapply(z,funHisto)
+  
+ref = interpolLagrange(3, a_test, b_test, n_eval_test, 'equi', funHisto)
+
+plot(z, sapply(z,funHisto), type="l",
+     ylim=range(c(sapply(z,funHisto),ref)),col = 'black')
+grid()
+title(main = paste("Lagrange interpolation with 4 to 11 equidistant nodes from histogram"))
+
+lines(z, ref, col = "green")
+lines(z, interpolLagrange(4, a_test, b_test, n_eval_test, 'equi', funHisto), col = "yellow")
+lines(z, interpolLagrange(6, a_test, b_test, n_eval_test, 'equi', funHisto), col = "purple")
+lines(z, interpolLagrange(8, a_test, b_test, n_eval_test, 'equi', funHisto), col = "blue")
+lines(z, interpolLagrange(10, a_test, b_test, n_eval_test, 'equi', funHisto), col = "red")
+
+legend('topright', 
+       legend=c('function','interpolation of degree 3', 
+        'interpolation of degree 4', 'interpolation of degree 6',
+       'interpolation of degree 8', 'interpolation of degree 10'), 
+       col = c('black','green', 'yellow', 'purple', 'blue', 'red'), lwd=3)
+```
+
+```{r}
+plot(z, sapply(z,funHisto), type="l",
+     ylim=range(c(y,interpolLagrange(20, a_test, b_test, n_eval_test, 'equi', funHisto))),
+     col = 'black')
+grid()
+title(main = paste("Lagrange interpolation with 21 to 31 equidistant nodes from histogram"))
+
+lines(z, interpolLagrange(20, a_test, b_test, n_eval_test, 'equi', funHisto), col = "red")
+lines(z, interpolLagrange(30, a_test, b_test, n_eval_test, 'equi', funHisto), col = "blue")
+#lines(z, interpolLagrange(40, a_test, b_test, n_eval_test, 'equi', funHisto), col = "purple")
+#lines(z, interpolLagrange(50, a_test, b_test, n_eval_test, 'equi', funHisto), col = "blue")
+#lines(z, interpolLagrange(58, a_test, b_test, n_eval_test, 'equi', funHisto), col = "red")
+#lines(z, interpolLagrange(59, a_test, b_test, n_eval_test, 'equi', funHisto), col = "gray")
+#lines(z, interpolLagrange(60, a_test, b_test, n_eval_test, 'equi', funHisto), col = "blue")
+
+legend('topright', legend=c('function','interpolation of degree 20', 
+                            'interpolation of degree 30'), 
+                            col = c('black','red', 'blue'), lwd=3)
+```
+Remarque : nous n'allons pas à un degré plus élevé car les irrégularités écrasent la densité. 
+
+(b) :
+```{r}
+plot(z, sapply(z,funHisto), type="l",
+     ylim=range(c(y,interpolLagrange(3, a_test, b_test, n_eval_test, 'equi', funHisto))),col = 'black')
+grid()
+title(main = paste("Lagrange interpolation with 4 equidistant nodes from histogram"))
+
+lines(z, interpolLagrange(3, a_test, b_test, n_eval_test, 'equi', funHisto), col = "red")
+legend('topright', 
+       legend=c('function','interpolation of degree 3'), 
+       col = c('black','red'), lwd=3)
+```
+On perçoit bien que le degré de l'interpolation est ici trop bas. 
+
+```{r}
+plot(z, sapply(z,funHisto), type="l",
+     ylim=range(c(y,interpolLagrange(5, a_test, b_test, n_eval_test, 'equi', funHisto))),col = 'black')
+grid()
+title(main = paste("Lagrange interpolation with 6 equidistant nodes"))
+
+lines(z, interpolLagrange(5, a_test, b_test, n_eval_test, 'equi', funHisto), col = "red")
+legend('topright', 
+       legend=c('function','interpolation of degree 5'), 
+       col = c('black','red'), lwd=3)
+```
+On commence à percevoir la tendance de la densité, mais le résultat reste insuffisant.
+
+```{r}
+plot(z, sapply(z,funHisto), type="l",
+     ylim=range(c(y,interpolLagrange(20, a_test, b_test, n_eval_test, 'equi', funHisto))),col = 'black')
+grid()
+title(main = paste("Lagrange interpolation with 61 equidistant nodes"))
+
+lines(z, interpolLagrange(20, a_test, b_test, n_eval_test, 'equi', funHisto), col = "red")
+legend('topright', 
+       legend=c('function','interpolation of degree 20'), 
+       col = c('black','red'), lwd=3)
+```
+On perçoit de grosses instabilités lorsque l'on augmente trop le degré du polynôme interpolateur : c'est le phénomène de Runge.
+
+*3.2. Interpolation à partir de l'histogramme*
+```{r}
+plot(z, sapply(z,funHisto), type="l",
+     ylim=range(c(y,interpolLagrange(3, a_test, b_test, n_eval_test, 'equi', funHisto))),col = 'black')
+grid()
+title(main = paste("Lagrange interpolation with 4 to 11 chebyshev nodes from histogram"))
+
+lines(z, interpolLagrange(3, a_test, b_test, n_eval_test, 'cheby', funHisto), col = "green")
+lines(z, interpolLagrange(4, a_test, b_test, n_eval_test, 'cheby', funHisto), col = "yellow")
+lines(z, interpolLagrange(6, a_test, b_test, n_eval_test, 'cheby', funHisto), col = "purple")
+lines(z, interpolLagrange(8, a_test, b_test, n_eval_test, 'cheby', funHisto), col = "blue")
+lines(z, interpolLagrange(10, a_test, b_test, n_eval_test, 'cheby', funHisto), col = "red")
+
+legend('topright', 
+       legend=c('function','interpolation of degree 3', 
+        'interpolation of degree 4', 'interpolation of degree 6',
+       'interpolation of degree 8', 'interpolation of degree 10'), 
+       col = c('black','green', 'yellow', 'purple', 'blue', 'red'), lwd=3)
+```
+
+```{r}
+
+plot(z, sapply(z,densite), type="n",
+     ylim=range(c(y,interpolLagrange(3, a_test, b_test, n_eval_test, 'equi', funHisto))),
+     col = 'black')
+grid()
+title(main = paste("Lagrange interpolation with 21 to 41 chebyshev nodes from histogram"))
+lines(z, interpolLagrange(20, a_test, b_test, n_eval_test, 'cheby', funHisto), col = "green")
+lines(z, interpolLagrange(30, a_test, b_test, n_eval_test, 'cheby', funHisto), col = "yellow")
+lines(z, interpolLagrange(40, a_test, b_test, n_eval_test, 'cheby', funHisto), col = "purple")
+#lines(z, interpolLagrange(50, a_test, b_test, n_eval_test, 'cheby', funHisto), col = "blue")
+#lines(z, interpolLagrange(58, a_test, b_test, n_eval_test, 'cheby', funHisto), col = "red")
+
+
+legend('topright', legend=c('function','interpolation of degree 20', 
+                            'interpolation of degree 30', 'interpolation of degree 40',
+                            'interpolation of degree 50', 'interpolation of degree 58'), 
+                            col = c('black','green', 'yellow', 'purple', 'blue', 'red', 'gray'), lwd=3)
+```
+```{r}
+piecewiseInterpol(1, 20, a_test, b_test, 1000, 'equi', funHisto, TRUE)
+```
+```{r}
+piecewiseInterpol(2, 20, a_test, b_test, 1000, 'equi', funHisto, TRUE)
+```
+```{r}
+piecewiseInterpol(3, 20, a_test, b_test, 1000, 'equi', funHisto, TRUE)
+```
+
+##### **Conclusion**
+
+  La méthode avec les nœuds de Chebyshev est la seule à bien marcher pour l'histogramme. Il me semble donc plus intéressant d'utiliser les nœuds de Chebyshev pour la méthode simple, quelque soit le cas (utilisation de la densite exacte ou de l'histogramme). 
+  
+#### 4. Méthode de quadrature
+*4.1. Estimation de* $p_{0.1}$ *à partir de la densité* $\phi{1.7,5.1}$
+
+4.1.1.
+
+```{r}
+
+
+trapezeInt =function(FUN,a,b,M){
+    ##' TRAPEZOIDAL INTEGRATION RULE (COMPOSITE)
+    ##' @param FUN : the function to be integrated
+    ##' @param a, b : interval end points 
+    ##' @param M : number of intervals (each of size (b-a)/M)
+    ##' @return: the value of the composite trapezoidal quadrature. 
+    x = seq(a,b, length.out= M+1)
+    y = sapply(x, FUN)
+    h = (b-a)/M 
+    q = h*sum(y)-(h/2)*(y[1]+y[M+1]) 
+    return(q)
+}
+
+refineTrapeze=function(FUN,a,b,M,q){
+    ##' refinement of the subdivision step: incremental method
+    ##' @param FUN : the function to be integrated
+    ##' @param a, b : interval end points 
+    ##' @param M : initial number of intervals (each of size (b-a)/M)
+    ##'  having been used to compute q
+    ##' @param  q : the value of the trapezoidal  quadrature method
+    ##'  of stepsize (b-a)/M
+    ##' @return : the value of the quadrature for a stepsize h' = h/2
+    h = (b-a)/M
+    x = seq(a+h/2,b-h/2, length.out = M)
+    ##  x : a vector of size M :
+    ##     the additional abscissas where 'fun' must be evaluated.
+    y = sapply(x, FUN)
+    Q = q/2 + (h/2)*sum(y) 
+    return(Q)
+}
+
+simpsonInt = function(FUN,a,b,M){
+    ##' Simpson integration via trapeze rule
+    ##' uses the fact that 
+    ##' simpson(h) = 4/3(trapeze(h/2) - 1/4 trapeze(h))
+    h = (b-a)/M;
+    qtrapeze = trapezeInt(FUN,a,b,M) 
+    qrefined = refineTrapeze(FUN,a,b,M,qtrapeze)
+    q =  (4/3)*(qrefined) - ((1/3)*qtrapeze)
+    return(q)
+}
+
+
+
+IntSimpM = simpsonInt(densite,0.1,0.9, 2)
+for (M in (3:25)){
+  IntSimpM = c(IntSimpM, simpsonInt(densite,0.1,0.9, M))
+}
+
+M =  seq(2, 25)
+
+plot(M, IntSimpM, type = 'o', ylim = range(c(0.82,simpsonInt(densite,0.1,0.9, 14))), ylab = "Valeur de l'intégrale")
+title(main = "Estimation de l'intégrale par une méthode de simpson composite")
+grid()
+
+```
+
+Ainsi, on peut en déduire en première approximation que $p_{0.1} \simeq  0.823$.
+
+```{r}
+q = c(0.1,0.9)
+
+p = pbeta(q, 1.7, 5.1)
+IntExact = (p[2]-p[1])
+
+Precision = (abs(0.823-IntExact)/IntExact) *100
+
+print(paste('En première approximation, nous avons une erreur de', floor(100*Precision)/100,' %'))
+```
+
+4.1.2.
+(a) : 
+
+L'odre de grandeur théorique de l'erreur de la méthode de Simpson est de : $EI_{M}^{(0.1,0.9)}(p)  \simeq p^{(3)}.\theta_{2,M}.(b-a).h^{3}$
+
+avec $\theta_{2,M} \in [a,b[$ et $a = 0.1$ et $b=0.9$.
+
+d'où $\theta_{2,M} \simeq 0.5$ et : 
+
+$EI_{M}^{(0.1,0.9)}(p)  \simeq 0.4.p^{(3)}.h^{3}.$
+
+
+
+```{r}
+p0.1.table = pbeta(q, 1.7, 5.1)
+p0.1.table = (p0.1.table[2]-p0.1.table[1])
+
+logDiff = log(abs(p0.1.table-IntSimpM))
+logM = log(M)
+pente = abs((logDiff[1]-logDiff[20])/(logM[1]-logM[20]))
+plot(logM, logDiff, type='o')
+title(main = "Logarithme de la valeur absolue de l'erreur")
+grid()
+
+print(paste("La courbe semble être une droite de pente", floor(100*pente)/100))
+```
+ On trouve bien une pente de d'environ -4, ce qui est en accord avec le cours ! En effet, l'erreur de la méthode de simpson est approximée à $\simeq K.h^{4}$ avec K une constante. En echelle logarithmique, on obtient bien une pente de -4 en fonction de log(M).
+ 
+(c)
+
+i.
+```{r}
+ evalErrSimpson=function(FUN,a,b,M){
+  ## Computes an approximation E of the error 
+  ## for the composite Simpson rule of step h=(b-a)/(2M). 
+  ##This requires computing I_M and I_{2M}. 
+  ##The value  q = I_{2M} is also returned. 
+  qth = trapezeInt(FUN,a,b,M)   ## M +1 evaluations
+  qth2 = refineTrapeze ( FUN,a,b,M,qth )  ## M evaluations
+  qth4 = refineTrapeze ( FUN,a,b,2*M,qth2 )   ## 2M evaluations
+  simps_h =   4/3*(qth2 - 1/4* qth ) 
+  simps_h2 =  4/3*(qth4 - 1/4* qth2 )
+  q = simps_h2  
+  E = (simps_h - q)/15
+    return(E)
+ }
+
+M = seq(14, 80)
+
+ErrAbs =  c()
+for(k in (14:80)){
+  ErrAbs = c(ErrAbs, evalErrSimpson(densite, 0.1, 0.9, k))
+}
+
+logErrAbs = log(abs(ErrAbs))
+logM = log(M)
+penteAbs = abs((logErrAbs[20]-logErrAbs[50])/(logM[20]-logM[50])) 
+
+plot(logM, logErrAbs, ylim = range(c(-30, -5)))
+grid()
+title (main = "Graphe log-log de l'erreur absolue contre le nombre de pas M")
+
+legend('topright', legend = c("log erreur"), col = c('black'), lwd = 3)
+
+print(paste("le modèle est d'une pente d'environ -", floor(100*penteAbs)/100))
+```
+ On trouve approximativement la même pente, ce qui est cohérent avec la 2.(b). Quoique beaucoup plus proche de la valeur théorique, de -4.
+ 
+ 4.1.3.
+```{r}
+
+quadrature = function(FUN,a,b,M){
+   qth = trapezeInt(FUN,a,b,M)   ## M +1 evaluations
+  qth2 = refineTrapeze ( FUN,a,b,M,qth )  ## M evaluations
+  qth4 = refineTrapeze ( FUN,a,b,2*M,qth2 )   ## 2M evaluations
+  simps_h =   4/3*(qth2 - 1/4* qth ) 
+  simps_h2 =  4/3*(qth4 - 1/4* qth2 )
+  return (simps_h2)
+}
+
+choixDuM = function(FUN, a, b, tolerance){
+  M = 10 ; erreur = 1 ; Mvecteur = 0 ; Qvecteur = 0 ; Evecteur = 0 ;
+  while ( 2*erreur > tolerance) {
+    a = evalErrSimpson(FUN,a,b,2*M)
+    quadrature = quadrature(FUN, a, b, 2*M)
+    Mvecteur = c(Mvecteur, M) ; Qvecteur = c(Qvecteur, quadrature) ;   Evecteur = c(Evecteur, erreur)
+    erreur = a
+    M = 2 * M
+  }
+  return (M)
+}
+
+approxfinale = simpsonInt(densite, 0.1, 0.9, choixDuM(densite, 0.1, 0.9,10^(-8)))
+
+print(paste("une approximation de p0.1 à", 10^-8, "près vaut :", floor(100000000*approxfinale)/100000000))
+
+```
+ #### 4.2. 
+ 
+ 4.2.1.
+```{r}
+densite_bruitee = function(x) {
+  return (funHisto(x))
+}
+```
+
+4.2.2.
+
+La théorie nous dit que $\Delta_{M} \rightarrow 0~quand~ M\rightarrow \infty .$
+
+4.2.3.
+```{r}
+M = seq(13:1000)
+deltaM = abs(simpsonInt(densite_bruitee, 0.1, 0.9, 13) - simpsonInt(densite, 0.1, 0.9, 13))
+for (k in (14 : 1000)) {
+  deltaM = c(deltaM, abs(simpsonInt(densite_bruitee, 0.1, 0.9, k) - simpsonInt(densite, 0.1, 0.9, k)))
+}
+
+plot(M, deltaM, type = 'l')
+title(main = "Ecart absolu entre l'intégrale de la densité bruité et la densitée réelle en fonction de M")
+```
+Non seulement la théorie est vérifiée expérimentalement, mais on s'aperçoit que la convergence est rapide bien que non uniforme. En effet, $\Delta_{M}$ est toujours inférieur à 0.002, et diminue rapidement par la suite.
+
+### 5 Extrapolation de Richardson et méthode de Romberg
+
+##### Estimation de p0.1
+
+5.1.
+```{r}
+
+romberg =function(FUN,n,a,b,M){## methode de Romberg avec n etapes
+    ## appliquee sur la fonction FUN sur l'intervalle (a,b), avec un
+    ## pas initial h = (b-a)/M
+    h= (b-a)/M 
+    A = rep(0, n+1)
+    A[1] = trapezeInt(FUN,a,b,M);
+    Mc = M
+    ## initialisation des differences divisees
+    for( i in 2:(n+1)){
+        A[i] = refineTrapeze( FUN,a,b, Mc, q= A[i-1])
+        Mc = 2*Mc 
+    }
+    delta = 1/4;
+    for (j in 2:(n+1)){
+           A[j : (n+1) ] = (A[j:(n+1)] - (delta^(j-1))*A[(j-1):n]) / (1 - delta^(j-1))
+    }
+    return(A)
+}
+
+n = 12 ; M = 3
+estRomberg = romberg(densite, n, 0.1, 0.9, M)
+
+plot(estRomberg, type = 'o')
+grid()
+title(main = 'Estimation de p0.1 par la méthode de Romberg')
+
+```
+
+5.2.
+
+```{r}
+
+plot(0:12, log(abs(p0.1.table-estRomberg)) )
+grid()
+title(main = "Evolution du logarithme de l'erreur de Romberg en fonction de M")
+
+I = c()
+for (k in (0:20)){
+  I = c(I, simpsonInt(densite, 0.1, 0.9, 3*2^k))
+}
+
+plot(log(abs(p0.1.table-I)))
+grid()
+title(main = "Evolution du logarithme de l'erreur de la méthode naïve en fonction de M")
+```
+
+Le pallier correspond à la saturation de la méthode : l'erreur diminue plus vite avec Romberg (lorsque n augmente), mais termine par ce stabiliser ce qui produit un palier. 
+
+Pour la méthode naïve, on voit que l'erreur se stabilise aussi autour de la même valeur finale mais converge plus lentement. 
+
+En effet, la valeur finale de l'erreur logarithmique ($\simeq -35$) est atteinte pour n = 7 pour la méthode de Romberg, mais n = 11 pour la méthode naïve. 
+
+Remarque : la méthode de Romberg est tout de même beaucoup plus rapide, car n = 11 correspont à $m = 2^{11}*M$ ce qui est très long !  
